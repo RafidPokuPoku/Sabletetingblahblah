@@ -1,0 +1,22 @@
+package com.rafid.oretory.client;
+
+import com.rafid.oretory.Oretory;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import org.jetbrains.annotations.NotNull;
+
+public class ClientModEvents {
+
+    public static void registerRenderers(@NotNull EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(Oretory.MINER_BE.get(), MinerRenderer::new);
+    }
+
+    public static void registerLayerDefinitions(@NotNull EntityRenderersEvent.RegisterLayerDefinitions event) {
+        // Ensure 'miner' matches your model class name
+        event.registerLayerDefinition(miner.LAYER_LOCATION, miner::createBodyLayer);
+    }
+
+    public static void registerScreens(RegisterMenuScreensEvent event) {
+        event.register(Oretory.MINER_MENU.get(), MinerScreen::new);
+    }
+}

@@ -1,0 +1,15 @@
+{
+  "itemGroup.oretory_tab": "Oretory",
+  "block.oretory.miner": "Miner",
+  "item.oretory.miner": "Miner",
+  "oretory.configuration.title": "Oretory Configs",
+  "oretory.configuration.section.oretory.common.toml": "Oretory Configs",
+  "oretory.configuration.section.oretory.common.toml.title": "Oretory Configs",
+  "oretory.configuration.items": "Item List",
+  "oretory.configuration.logDirtBlock": "Log Dirt Block",
+  "oretory.configuration.magicNumberIntroduction": "Magic Number Text",
+  "oretory.configuration.magicNumber": "Magic Number",
+
+  "subtitles.oretory.miner_idle": "Miner hums",
+  "subtitles.oretory.miner_mining": "Miner drills"
+}

@@ -1,0 +1,20 @@
+{
+  "miner_idle": {
+    "subtitle": "subtitles.oretory.miner_idle",
+    "sounds": [
+      {
+        "name": "oretory:miner_idle",
+        "stream": true
+      }
+    ]
+  },
+  "miner_mining": {
+    "subtitle": "subtitles.oretory.miner_mining",
+    "sounds": [
+      {
+        "name": "oretory:miner_mining",
+        "stream": true
+      }
+    ]
+  }
+}
