@@ -1,31 +1,31 @@
-# The name of the mod loader type to load
 modLoader="javafml"
-
-# The version range of the loader
-loaderVersion="[2,)"
-
-# The license for your mod
+loaderVersion="[4,)"
 license="MIT"
 
 [[mods]]
 modId="oretory"
 version="1.0.0"
 displayName="Oretory"
-authors="RufusOxide"
-description='''
-Oretory Mod - Built for NeoForge 1.21.1.
-'''
+authors="Rafid"
+description="A Create mod addon."
 
 [[dependencies.oretory]]
 modId="neoforge"
 type="required"
-versionRange="[21.1.65,)"
+versionRange="[21.1.219,)"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.oretory]]
 modId="minecraft"
 type="required"
-versionRange="[1.21.1, 1.22)"
+versionRange="[1.21.1,1.22)"
 ordering="NONE"
+side="BOTH"
+
+[[dependencies.oretory]]
+modId="create"
+type="required"
+versionRange="[0.6.10,)"
+ordering="AFTER"
 side="BOTH"

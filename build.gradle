@@ -1,77 +1,66 @@
 plugins {
     id 'java-library'
+    id 'eclipse'
+    id 'idea'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '1.0.14'
+    id 'net.neoforged.moddev' version '2.0.74'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 21
 }
 
-repositories {
-    mavenLocal()
-    maven { url = "https://maven.neoforged.net/releases" }
-    maven { url = "https://maven.parchmentmc.org" }
-
-    // Official Create and Ponder Hosting
-    maven { url = "https://maven.createmod.net" }
-    maven { url = "https://maven.tterrag.com" }
-
-    // REQUIRED: This is where forgeconfigapiport lives
-    maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" }
-
-    mavenCentral()
-}
-
-base {
-    archivesName = 'oretory'
-}
+group = 'com.rafid.oretory'
+version = '1.0.0'
 
 neoForge {
-    version = project.neo_version
+    version = '21.1.219'
 
     parchment {
-        mappingsVersion = project.parchment_mappings_version
-        minecraftVersion = project.parchment_minecraft_version
+        mappingsVersion = '2024.11.17'
+        minecraftVersion = '1.21.1'
     }
 
     runs {
-        client {
-            client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'oretory'
-        }
+        client { client() }
+        server { server(); programArgument '--nogui' }
     }
 
     mods {
-        oretory {
-            sourceSet sourceSets.main
-        }
+        oretory { sourceSet sourceSets.main }
     }
 }
 
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { name = 'ParchmentMC'; url = 'https://maven.parchmentmc.org' }
+    maven { name = 'Create'; url = 'https://maven.createmod.net' }
+    flatDir { dir 'libs' }
+    maven { name = "NeoForged"; url = "https://maven.neoforged.net/releases" }
+}
+
 dependencies {
-    // Verified 1.21.1 Ponder Lib
-    implementation "net.createmod.ponder:Ponder-NeoForge-1.21.1:1.0.46"
+    // This loads Create and Flywheel. Create will provide Ponder automatically.
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
 }
 
 tasks.withType(ProcessResources).configureEach {
     var replaceProperties = [
-            minecraft_version      : minecraft_version,
-            minecraft_version_range: "[1.21.1, 1.22)",
-            neo_version            : neo_version,
-            neo_version_range      : "[21.1.66,)",
+            minecraft_version      : "1.21.1",
+            minecraft_version_range: "[1.21.1,1.22)",
+            neo_version            : "21.1.219",
+            neo_version_range      : "[21.1.219,)",
             loader_version_range   : "[4,)",
-            mod_id                 : mod_id,
-            mod_name               : mod_name,
-            mod_license            : mod_license,
-            mod_version            : mod_version,
+            mod_id                 : "oretory",
+            mod_name               : "Oretory",
+            mod_license            : "MIT",
+            mod_version            : "1.0.0",
             mod_authors            : "Rafid",
-            mod_description        : "An automated mining mod."
+            mod_description        : "Oretory Mod using Create 0.6.10."
     ]
-    inputs.properties(replaceProperties)
-
-    filesMatching(['META-INF/neoforge.mods.toml']) {
-        expand(replaceProperties)
-    }
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/neoforge.mods.toml']) { expand replaceProperties }
 }
