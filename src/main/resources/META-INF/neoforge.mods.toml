@@ -29,3 +29,10 @@ type="required"
 versionRange="[0.6.10,)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.oretory]]
+modId="ponder"
+type="required"
+versionRange="[1.0,)"
+ordering="AFTER"
+side="BOTH"

@@ -3,7 +3,8 @@ package com.rafid.oretory;
 import com.mojang.logging.LogUtils;
 import com.rafid.oretory.client.ClientModEvents;
 import com.rafid.oretory.client.MinerItemRenderer;
-import com.rafid.oretory.ponder.MinerPonderScenes;
+import com.rafid.oretory.ponder.ModPonderIndex;
+import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -18,6 +19,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
@@ -93,18 +95,18 @@ public class Oretory {
         modEventBus.addListener(ClientModEvents::registerLayerDefinitions);
         modEventBus.addListener(ClientModEvents::registerScreens);
         modEventBus.addListener(this::registerCapabilities);
-
-        // Use a standard ModBus event to check for Ponder registration
         modEventBus.addListener(this::commonSetup);
+
+        // Directly register Ponder scenes, bypassing the ServiceLoader which
+        // does not work reliably in the NeoForge dev environment (exploded class folders).
+        // PonderIndex.get() returns the singleton; addPlugin() queues our plugin for registration.
+        PonderIndex.addPlugin(new ModPonderIndex());
 
         LOGGER.info("Oretory initialized! Tab: {}", ORETORY_TAB.getId());
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        // We use the event bus from the setup event to listen for Create's ponder events safely
         event.enqueueWork(() -> {
-            // Note: In 1.21.1, Create's Ponder registration is usually handled
-            // via its own bus. If you still want the "reflection" style to detect it:
             LOGGER.info("Oretory performing common setup...");
         });
     }
