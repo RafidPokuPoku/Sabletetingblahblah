@@ -2,32 +2,43 @@ plugins {
     id 'java-library'
     id 'eclipse'
     id 'idea'
-    id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.74'
+    // Updated plugin version for better compatibility in 2026
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-group = 'com.rafid.oretory'
 version = '1.0.0'
+group = 'com.yourname.oretory'
+
+base {
+    archivesName = 'oretory'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 neoForge {
+    // UPDATED: This matches the requirement from your error screen
     version = '21.1.219'
 
-    parchment {
-        mappingsVersion = '2024.11.17'
-        minecraftVersion = '1.21.1'
-    }
-
     runs {
-        client { client() }
-        server { server(); programArgument '--nogui' }
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'oretory'
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'oretory'
+        }
     }
 
     mods {
-        oretory { sourceSet sourceSets.main }
+        oretory {
+            sourceSet sourceSets.main
+        }
     }
 }
 
@@ -36,15 +47,15 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 repositories {
     mavenLocal()
     mavenCentral()
-    maven { name = 'ParchmentMC'; url = 'https://maven.parchmentmc.org' }
-    maven { name = 'Create'; url = 'https://maven.createmod.net' }
-    flatDir { dir 'libs' }
-    maven { name = "NeoForged"; url = "https://maven.neoforged.net/releases" }
+    // Added NeoForged maven just in case it needs to pull extra tools
+    maven { url = "https://maven.neoforged.net/releases" }
 }
 
 dependencies {
-    // This loads Create and Flywheel. Create will provide Ponder automatically.
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    // These match your verified libs folder exactly
+    implementation files('libs/create-1.21.1-6.0.10-223.jar')
+    implementation files('libs/flywheel-neoforge-1.21.1-1.0.6.jar')
+    implementation files('libs/ponder-neoforge-1.0.82+mc1.21.1.jar')
 }
 
 tasks.withType(ProcessResources).configureEach {
@@ -57,10 +68,13 @@ tasks.withType(ProcessResources).configureEach {
             mod_id                 : "oretory",
             mod_name               : "Oretory",
             mod_license            : "MIT",
-            mod_version            : "1.0.0",
-            mod_authors            : "Rafid",
-            mod_description        : "Oretory Mod using Create 0.6.10."
+            mod_version            : version,
+            mod_authors            : "You",
+            mod_description        : "Custom Ponder Scenes"
     ]
     inputs.properties replaceProperties
-    filesMatching(['META-INF/neoforge.mods.toml']) { expand replaceProperties }
+
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
 }

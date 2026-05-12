@@ -7,7 +7,7 @@ modId="oretory"
 version="1.0.0"
 displayName="Oretory"
 authors="Rafid"
-description="A Create mod addon."
+description="A Create mod addon focused on Oretory mechanics."
 
 [[dependencies.oretory]]
 modId="neoforge"
