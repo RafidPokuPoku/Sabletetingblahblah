@@ -18,17 +18,18 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredBlock;
+import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
-import net.neoforged.neoforge.registries.DeferredHolder;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
@@ -39,21 +40,41 @@ public class Oretory {
     public static final String MODID = "oretory";
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MODID);
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
-    public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
-    public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
-    public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MODID);
-    public static final DeferredRegister<SoundEvent> SOUND_EVENTS = DeferredRegister.create(Registries.SOUND_EVENT, MODID);
+    public static final DeferredRegister.Blocks                        BLOCKS         = DeferredRegister.createBlocks(MODID);
+    public static final DeferredRegister.Items                         ITEMS          = DeferredRegister.createItems(MODID);
+    public static final DeferredRegister<BlockEntityType<?>>           BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    public static final DeferredRegister<CreativeModeTab>              CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
+    public static final DeferredRegister<MenuType<?>>                  MENUS          = DeferredRegister.create(Registries.MENU, MODID);
+    public static final DeferredRegister<SoundEvent>                   SOUND_EVENTS   = DeferredRegister.create(Registries.SOUND_EVENT, MODID);
 
+    // -------------------------------------------------------------------------
+    // Sounds
+    // -------------------------------------------------------------------------
+
+    /** Looping idle hum — plays whenever the miner has fuel but isn't mining. */
     public static final DeferredHolder<SoundEvent, SoundEvent> MINER_IDLE = SOUND_EVENTS.register("miner_idle",
-            () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(MODID, "miner_idle")));
+            () -> SoundEvent.createVariableRangeEvent(
+                    ResourceLocation.fromNamespaceAndPath(MODID, "miner_idle")));
 
+    /** Looping mining sound — pitch-shifted based on fuel speed. */
     public static final DeferredHolder<SoundEvent, SoundEvent> MINER_MINING = SOUND_EVENTS.register("miner_mining",
-            () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(MODID, "miner_mining")));
+            () -> SoundEvent.createVariableRangeEvent(
+                    ResourceLocation.fromNamespaceAndPath(MODID, "miner_mining")));
+
+    /** One-shot "chunk" sound when a cycle completes and items are deposited. */
+    public static final DeferredHolder<SoundEvent, SoundEvent> MINER_DEPOSIT = SOUND_EVENTS.register("miner_deposit",
+            () -> SoundEvent.createVariableRangeEvent(
+                    ResourceLocation.fromNamespaceAndPath(MODID, "miner_deposit")));
+
+    // -------------------------------------------------------------------------
+    // Blocks / Items
+    // -------------------------------------------------------------------------
 
     public static final DeferredBlock<MinerBlock> MINER_BLOCK = BLOCKS.register("miner",
-            () -> new MinerBlock(BlockBehaviour.Properties.of().mapColor(MapColor.STONE).strength(3.0f).noOcclusion()));
+            () -> new MinerBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.STONE)
+                    .strength(3.0f)
+                    .noOcclusion()));
 
     public static final DeferredItem<BlockItem> MINER_ITEM = ITEMS.register("miner",
             () -> new BlockItem(MINER_BLOCK.get(), new Item.Properties()) {
@@ -69,21 +90,37 @@ public class Oretory {
                 }
             });
 
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MinerBlockEntity>> MINER_BE = BLOCK_ENTITIES.register("miner_be",
-            () -> BlockEntityType.Builder.of(MinerBlockEntity::new, MINER_BLOCK.get())
-                    // noinspection DataFlowIssue
-                    .build(null));
+    // -------------------------------------------------------------------------
+    // Block Entity / Menu
+    // -------------------------------------------------------------------------
 
-    public static final DeferredHolder<MenuType<?>, MenuType<MinerMenu>> MINER_MENU = MENUS.register("miner_menu",
-            () -> IMenuTypeExtension.create((windowId, inv, data) -> new MinerMenu(windowId, inv)));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MinerBlockEntity>> MINER_BE =
+            BLOCK_ENTITIES.register("miner_be",
+                    () -> BlockEntityType.Builder
+                            .of(MinerBlockEntity::new, MINER_BLOCK.get())
+                            //noinspection DataFlowIssue
+                            .build(null));
 
-    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> ORETORY_TAB = CREATIVE_MODE_TABS.register("oretory_tab", () -> CreativeModeTab.builder()
-            .title(Component.translatable("itemGroup.oretory_tab"))
-            .icon(() -> MINER_ITEM.get().getDefaultInstance())
-            .displayItems((parameters, output) -> output.accept(MINER_ITEM.get()))
-            .build());
+    public static final DeferredHolder<MenuType<?>, MenuType<MinerMenu>> MINER_MENU =
+            MENUS.register("miner_menu",
+                    () -> IMenuTypeExtension.create((windowId, inv, data) -> new MinerMenu(windowId, inv)));
 
-    public Oretory(IEventBus modEventBus) {
+    // -------------------------------------------------------------------------
+    // Creative Tab
+    // -------------------------------------------------------------------------
+
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> ORETORY_TAB =
+            CREATIVE_MODE_TABS.register("oretory_tab", () -> CreativeModeTab.builder()
+                    .title(Component.translatable("itemGroup.oretory_tab"))
+                    .icon(() -> MINER_ITEM.get().getDefaultInstance())
+                    .displayItems((parameters, output) -> output.accept(MINER_ITEM.get()))
+                    .build());
+
+    // -------------------------------------------------------------------------
+    // Constructor
+    // -------------------------------------------------------------------------
+
+    public Oretory(IEventBus modEventBus, ModContainer modContainer) {
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
         BLOCK_ENTITIES.register(modEventBus);
@@ -96,22 +133,25 @@ public class Oretory {
         modEventBus.addListener(ClientModEvents::registerScreens);
         modEventBus.addListener(this::registerCapabilities);
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(MinerPackets::register);
 
-        // Directly register Ponder scenes, bypassing the ServiceLoader which
-        // does not work reliably in the NeoForge dev environment (exploded class folders).
-        // PonderIndex.get() returns the singleton; addPlugin() queues our plugin for registration.
+        // Register config
+        modContainer.registerConfig(ModConfig.Type.COMMON, OretoryConfig.SPEC, "oretory-common.toml");
+
+        // Ponder scenes
         PonderIndex.addPlugin(new ModPonderIndex());
 
-        LOGGER.info("Oretory initialized! Tab: {}", ORETORY_TAB.getId());
+        LOGGER.info("Oretory initialized!");
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> {
-            LOGGER.info("Oretory performing common setup...");
-        });
+        event.enqueueWork(() -> LOGGER.info("Oretory common setup complete."));
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
-        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, MINER_BE.get(), MinerBlockEntity::getItemHandler);
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                MINER_BE.get(),
+                MinerBlockEntity::getItemHandler);
     }
 }
