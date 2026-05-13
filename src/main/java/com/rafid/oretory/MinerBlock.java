@@ -6,7 +6,9 @@ import com.simibubi.create.content.equipment.wrench.WrenchItem;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Containers;
@@ -85,7 +87,6 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
             @NotNull BlockPos pos, @NotNull Player player, @NotNull InteractionHand hand,
             @NotNull BlockHitResult hitResult) {
 
-        // Wrench takes priority — must be main hand
         if (hand == InteractionHand.MAIN_HAND && stack.getItem() instanceof WrenchItem) {
             InteractionResult result = onWrenched(state, new UseOnContext(player, hand, hitResult));
             return result.consumesAction()
@@ -93,99 +94,72 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
                     : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
-        // Shift + right-click with a Brass Ingot upgrades to Brass Miner
-        // Must be main hand so off-hand doesn't trigger it accidentally
-        if (hand == InteractionHand.MAIN_HAND && player.isShiftKeyDown() && isBrassIngot(stack)) {
+        if (hand == InteractionHand.MAIN_HAND && isBrassIngot(stack)) {
+            if (!player.isShiftKeyDown()) {
+                return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+            }
             if (!level.isClientSide) {
                 upgradeToAdvancedMiner(level, pos, state, stack, player);
             }
-            // Return SUCCESS on both sides so the action is consumed and GUI does NOT open
-            return ItemInteractionResult.SUCCESS;
+            return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
 
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
-    /**
-     * Replaces this Andesite Miner with a Brass Miner, carrying over the
-     * redstone mode, fuel/output inventory, and filter NBT from the old BE.
-     * Consumes one Brass Ingot from the player's hand.
-     */
     private void upgradeToAdvancedMiner(Level level, BlockPos pos, BlockState oldState,
                                         ItemStack heldStack, Player player) {
         BlockEntity oldBe = level.getBlockEntity(pos);
         if (!(oldBe instanceof MinerBlockEntity minerBe)) return;
 
-        // Snapshot what we need before the block is removed
         MinerRedstoneMode savedMode   = minerBe.redstoneMode;
         ItemStack         savedFuel   = minerBe.inventory.getStackInSlot(0).copy();
         ItemStack         savedOutput = minerBe.inventory.getStackInSlot(1).copy();
-        // Grab filter item if one is set — drop it so the player doesn't lose it
         ItemStack         savedFilter = minerBe.filter != null
                 ? minerBe.filter.getFilter().copy()
                 : ItemStack.EMPTY;
 
-        // Build the new block state, copying redstone mode over
         BlockState newState = Oretory.ADVANCED_MINER_BLOCK.get().defaultBlockState()
                 .setValue(AdvancedMinerBlock.REDSTONE_MODE, savedMode)
                 .setValue(AdvancedMinerBlock.MINING, false);
 
-        // Place the new block (this destroys the old BE)
         level.setBlock(pos, newState, 3);
         level.sendBlockUpdated(pos, oldState, newState, 3);
 
-        // Now configure the new BE
         BlockEntity newBe = level.getBlockEntity(pos);
         if (newBe instanceof AdvancedMinerBlockEntity advBe) {
             advBe.redstoneMode = savedMode;
 
-            // Carry over fuel
             if (!savedFuel.isEmpty()) {
-                ItemStack remainder = advBe.inventory.insertItem(0, savedFuel, false);
-                if (!remainder.isEmpty())
-                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), remainder);
+                ItemStack rem = advBe.inventory.insertItem(0, savedFuel, false);
+                if (!rem.isEmpty())
+                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), rem);
             }
-
-            // Carry over bottom ore output
             if (!savedOutput.isEmpty()) {
-                ItemStack remainder = advBe.inventory.insertItem(1, savedOutput, false);
-                if (!remainder.isEmpty())
-                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), remainder);
+                ItemStack rem = advBe.inventory.insertItem(1, savedOutput, false);
+                if (!rem.isEmpty())
+                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), rem);
             }
 
             advBe.recalculateFilterFace();
             advBe.setChanged();
         }
 
-        // Drop the old filter item on the ground so the player doesn't lose it
         if (!savedFilter.isEmpty())
             Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), savedFilter);
 
-        // Consume one Brass Ingot from the player's hand (unless in creative)
-        if (!player.getAbilities().instabuild) {
+        if (!player.getAbilities().instabuild)
             heldStack.shrink(1);
-        }
 
-        // Satisfying upgrade sound
         level.playSound(null, pos, SoundEvents.ANVIL_USE, SoundSource.BLOCKS, 0.6f, 1.2f);
-
-        // Tell the player what happened (action bar)
         player.displayClientMessage(
-                Component.literal("Upgraded to Brass Miner!").withStyle(ChatFormatting.GOLD),
-                true
-        );
+                Component.literal("Upgraded to Brass Miner!").withStyle(ChatFormatting.GOLD), true);
     }
 
-    /**
-     * Returns true if the given stack is a Create Brass Ingot.
-     */
     private static boolean isBrassIngot(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        var loc = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                .getKey(stack.getItem());
-        return loc != null
-                && "create".equals(loc.getNamespace())
-                && "brass_ingot".equals(loc.getPath());
+        ResourceLocation key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return ResourceLocation.fromNamespaceAndPath("create", "brass_ingot").equals(key);
     }
 
     @Override
@@ -193,11 +167,7 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
             @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
             @NotNull Player player, @NotNull BlockHitResult hitResult) {
 
-        // If the player is shift-clicking, don't open the GUI —
-        // the item interaction (upgrade or other) should have been handled above.
-        if (player.isShiftKeyDown()) {
-            return InteractionResult.PASS;
-        }
+        if (player.isShiftKeyDown()) return InteractionResult.PASS;
 
         if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
@@ -208,9 +178,6 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
         return InteractionResult.SUCCESS;
     }
 
-    /**
-     * Called when a neighbouring block is placed or removed.
-     */
     @Override
     public void neighborChanged(
             @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
@@ -220,17 +187,13 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof MinerBlockEntity minerBe) {
                 boolean faceChanged = minerBe.recalculateFilterFace();
-                if (faceChanged) {
+                if (faceChanged)
                     level.sendBlockUpdated(pos, state, level.getBlockState(pos), 3);
-                }
                 minerBe.setChanged();
             }
         }
     }
 
-    /**
-     * Called after the block is placed in the world.
-     */
     @Override
     public void setPlacedBy(
             @NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState state,

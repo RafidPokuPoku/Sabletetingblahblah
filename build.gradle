@@ -2,7 +2,6 @@ plugins {
     id 'java-library'
     id 'eclipse'
     id 'idea'
-    // Updated plugin version for better compatibility in 2026
     id 'net.neoforged.moddev' version '2.0.141'
 }
 
@@ -19,8 +18,13 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url = "https://maven.neoforged.net/releases" }
+}
+
 neoForge {
-    // UPDATED: This matches the requirement from your error screen
     version = '21.1.219'
 
     runs {
@@ -44,18 +48,16 @@ neoForge {
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-    // Added NeoForged maven just in case it needs to pull extra tools
-    maven { url = "https://maven.neoforged.net/releases" }
-}
-
 dependencies {
-    // These match your verified libs folder exactly
     implementation files('libs/create-1.21.1-6.0.10-223.jar')
     implementation files('libs/flywheel-neoforge-1.21.1-1.0.6.jar')
     implementation files('libs/ponder-neoforge-1.0.82+mc1.21.1.jar')
+
+    // compileOnly  = JEI API available at compile time (so your code compiles)
+    // runtimeOnly  = JEI jar loaded when running the dev client in IntelliJ
+    // Both lines must point to the SAME exact filename.
+    compileOnly files('libs/jei-1.21.1-neoforge-19.27.0.340.jar')
+    runtimeOnly files('libs/jei-1.21.1-neoforge-19.27.0.340.jar')
 }
 
 tasks.withType(ProcessResources).configureEach {
