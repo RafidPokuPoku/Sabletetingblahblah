@@ -5,7 +5,13 @@ import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.logistics.funnel.AbstractFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.BrassFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.FunnelBlock;
+import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.behaviour.CenteredSideValueBoxTransform;
+import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
+import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
 import com.simibubi.create.foundation.utility.CreateLang;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -18,9 +24,6 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
@@ -58,7 +61,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class MinerBlockEntity extends net.minecraft.world.level.block.entity.BlockEntity
+public class MinerBlockEntity extends SmartBlockEntity
         implements MenuProvider, IHaveGoggleInformation {
 
     // -------------------------------------------------------------------------
@@ -101,7 +104,15 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
     }
 
     // -------------------------------------------------------------------------
-    // Animation states
+    // Horizontal sides in priority order for the dynamic filter face.
+    // TOP and BOTTOM excluded — those are the fuel/output faces.
+    // -------------------------------------------------------------------------
+    private static final Direction[] HORIZONTAL_SIDES = {
+            Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
+    };
+
+    // -------------------------------------------------------------------------
+    // Animation states (client-only)
     // -------------------------------------------------------------------------
     public final AnimationState idleAnimationState   = new AnimationState();
     public final AnimationState miningAnimationState = new AnimationState();
@@ -113,34 +124,97 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
     @Nullable private MinerSoundInstance miningSoundInstance;
 
     // -------------------------------------------------------------------------
-    // State
+    // Block-entity state
     // -------------------------------------------------------------------------
     private int status         = STATUS_OFF;
     private int miningProgress = 0;
     private int noOreTicks     = 0;
     MinerRedstoneMode redstoneMode = MinerRedstoneMode.IGNORED;
-
-    /**
-     * Output threshold: external automation can only extract from the output
-     * slot once its count reaches this value. Default 1 = immediate release.
-     *
-     * This is the AUTHORITATIVE value on the server. The client box reads it
-     * back via ContainerData. It is saved to NBT so it survives GUI close/open.
-     */
-    private int outputThreshold = 1;
-
+    private int outputThreshold    = 1;
     private boolean ponderForceMining = false;
     private boolean ponderForceLit    = false;
 
     @Nullable private transient FuelTier cachedFuelTier = null;
-
-    // -------------------------------------------------------------------------
-    // Round-robin funnel tracking
-    // -------------------------------------------------------------------------
     private int roundRobinIndex = 0;
 
     // -------------------------------------------------------------------------
-    // Inventory
+    // Dynamic filter face.  null = all sides blocked, box hidden.
+    // -------------------------------------------------------------------------
+    @Nullable private Direction filterFace = Direction.NORTH;
+
+    // FilteringBehaviour — gates the FUEL slot (slot 0)
+    public FilteringBehaviour filter;
+
+    // =========================================================================
+    // FILTER SLOT TRANSFORM
+    //
+    // Extends CenteredSideValueBoxTransform (ValueBoxTransform.Sided) so Create's
+    // renderer takes the Sided branch for both item rendering and the outliner.
+    //
+    // THE CORE PROBLEM WITH SIDED + DYNAMIC FACE:
+    // FilteringRenderer.tick() and ValueBox.render() both call:
+    //     fromSide(theDirectionThePlayerIsLookingAt)
+    // before calling shouldRender(). This mutates the internal `direction` field.
+    // So isSideActive(state, direction) receives the LOOKED-AT direction, not
+    // our filterFace — meaning the cross only appears when the player looks at
+    // exactly the filter face.
+    //
+    // FIX: Override getSide() to always return filterFace, ignoring whatever
+    // fromSide() was called with. This means:
+    //   - getLocalOffset() always positions the box on filterFace
+    //   - rotate() always orients toward filterFace
+    //   - shouldRender() / isSideActive() always evaluate against filterFace
+    // So the cross and item always appear on the correct face regardless of
+    // which face the player is looking at, as long as filterFace is set.
+    // =========================================================================
+    public static class MinerFilterSlot extends CenteredSideValueBoxTransform {
+
+        private final MinerBlockEntity owner;
+
+        public MinerFilterSlot(MinerBlockEntity owner) {
+            super((state, dir) -> true);
+            this.owner = owner;
+        }
+
+        // Always return filterFace, ignoring whatever fromSide() set.
+        // This is the key override — every Sided method that calls getSide()
+        // (getLocalOffset, rotate, shouldRender, isSideActive) will now
+        // consistently use filterFace instead of the looked-at direction.
+        @Override
+        public Direction getSide() {
+            return owner.filterFace != null ? owner.filterFace : Direction.NORTH;
+        }
+
+        // Render only when a filter face is actually assigned.
+        @Override
+        public boolean shouldRender(net.minecraft.world.level.LevelAccessor level, BlockPos pos, BlockState state) {
+            return owner.filterFace != null;
+        }
+
+        @Override
+        protected boolean isSideActive(BlockState state, Direction direction) {
+            return direction == owner.filterFace;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Ponder helpers
+    // -------------------------------------------------------------------------
+    public void setPonderMining(boolean mining) { this.ponderForceMining = mining; }
+    public void setPonderLit(boolean lit)       { this.ponderForceLit    = lit;    }
+
+    // -------------------------------------------------------------------------
+    // Fuel filter predicate — gates slot 0.  Empty filter = all fuels pass.
+    // -------------------------------------------------------------------------
+    private boolean passesFuelFilter(ItemStack stack) {
+        if (filter == null) return true;
+        ItemStack filterItem = filter.getFilter();
+        if (filterItem.isEmpty()) return true;
+        return filter.test(stack);
+    }
+
+    // -------------------------------------------------------------------------
+    // Inventory  (slot 0 = fuel, slot 1 = output)
     // -------------------------------------------------------------------------
     public final ItemStackHandler inventory = new ItemStackHandler(2) {
         @Override
@@ -148,57 +222,39 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
             setChanged();
             if (slot == 0) cachedFuelTier = null;
         }
-
         @Override
         public boolean isItemValid(int slot, @NotNull ItemStack stack) {
-            if (slot == 0) return FuelTier.isValidFuel(stack);
+            if (slot == 0) {
+                if (!FuelTier.isValidFuel(stack)) return false;
+                return passesFuelFilter(stack);
+            }
             return slot == 1;
         }
     };
 
-    // Fuel side: insert only, no extract (UP face)
     private final IItemHandlerModifiable fuelHandler =
             new ItemStackHandlerWrapper(inventory, 0, true, false);
 
-    /**
-     * Output handler exposed to ALL external automation (hoppers, pipes,
-     * funnels via capability).  Extraction is gated: nothing comes out until
-     * the output slot holds at least outputThreshold items.
-     *
-     * Insert is always blocked — nothing external should put items IN here.
-     */
     private final IItemHandlerModifiable outputHandler = new IItemHandlerModifiable() {
-        @Override public int  getSlots()                                          { return 1; }
-        @Override public int  getSlotLimit(int s)                                 { return inventory.getSlotLimit(1); }
-        @Override public boolean isItemValid(int s, @NotNull ItemStack stack)     { return false; }
-        @Override public @NotNull ItemStack getStackInSlot(int s)                 { return inventory.getStackInSlot(1); }
-        @Override public void setStackInSlot(int s, @NotNull ItemStack stack)     { inventory.setStackInSlot(1, stack); }
-
-        @Override
-        public @NotNull ItemStack insertItem(int s, @NotNull ItemStack stack, boolean sim) {
-            return stack; // always block external inserts
-        }
-
-        @Override
-        public @NotNull ItemStack extractItem(int s, int amount, boolean sim) {
+        @Override public int  getSlots()                                      { return 1; }
+        @Override public int  getSlotLimit(int s)                             { return inventory.getSlotLimit(1); }
+        @Override public boolean isItemValid(int s, @NotNull ItemStack stack) { return false; }
+        @Override public @NotNull ItemStack getStackInSlot(int s)             { return inventory.getStackInSlot(1); }
+        @Override public void setStackInSlot(int s, @NotNull ItemStack stack) { inventory.setStackInSlot(1, stack); }
+        @Override public @NotNull ItemStack insertItem(int s, @NotNull ItemStack stack, boolean sim) { return stack; }
+        @Override public @NotNull ItemStack extractItem(int s, int amount, boolean sim) {
             ItemStack current = inventory.getStackInSlot(1);
-            // Gate: must have at least outputThreshold items before anything leaves
-            if (current.isEmpty() || current.getCount() < outputThreshold)
-                return ItemStack.EMPTY;
+            if (current.isEmpty()) return ItemStack.EMPTY;
+            if (current.getCount() < outputThreshold) return ItemStack.EMPTY;
             return inventory.extractItem(1, amount, sim);
         }
     };
 
-    /**
-     * Combined handler for lateral sides: fuel insert + threshold-gated output.
-     * Using a real CombinedInvWrapper means slot 0 = fuel, slot 1 = output,
-     * and the output slot still goes through the gated outputHandler above.
-     */
     private final CombinedInvWrapper combinedHandler =
             new CombinedInvWrapper(fuelHandler, outputHandler);
 
     // -------------------------------------------------------------------------
-    // ContainerData — synced to client every tick by the vanilla container
+    // ContainerData — shared with MinerMenu for GUI sync
     // -------------------------------------------------------------------------
     protected final ContainerData data = new ContainerData() {
         @Override
@@ -215,23 +271,14 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
                 default -> 0;
             };
         }
-
         @Override
         public void set(int index, int value) {
-            // NOTE: the server NEVER calls set() on ContainerData from outside;
-            // set() is only invoked client-side by the vanilla sync mechanism.
-            // We intentionally do NOT update outputThreshold here — the server
-            // field is the truth, updated only via setOutputThreshold().
             if (index == MinerMenu.DATA_STATUS)   MinerBlockEntity.this.status         = value;
             if (index == MinerMenu.DATA_PROGRESS) MinerBlockEntity.this.miningProgress = value;
             if (index == MinerMenu.DATA_RSMODE)
                 MinerBlockEntity.this.redstoneMode =
-                        MinerRedstoneMode.values()[Math.max(0,
-                                Math.min(value, MinerRedstoneMode.values().length - 1))];
-            // DATA_THRESHOLD is read-only from the client's perspective;
-            // changes come in via the SetThresholdPayload packet -> setOutputThreshold().
+                        MinerRedstoneMode.values()[Math.max(0, Math.min(value, MinerRedstoneMode.values().length - 1))];
         }
-
         @Override
         public int getCount() { return MinerMenu.DATA_COUNT; }
     };
@@ -244,8 +291,65 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         this.redstoneMode = state.getValue(MinerBlock.REDSTONE_MODE);
     }
 
-    public void setPonderMining(boolean mining) { this.ponderForceMining = mining; }
-    public void setPonderLit(boolean lit)       { this.ponderForceLit    = lit;    }
+    // -------------------------------------------------------------------------
+    // SmartBlockEntity — register behaviours
+    // -------------------------------------------------------------------------
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        filter = new FilteringBehaviour(this, new MinerFilterSlot(this))
+                .withCallback(stack -> setChanged());
+        behaviours.add(filter);
+    }
+
+    // =========================================================================
+    // DYNAMIC FILTER FACE
+    // =========================================================================
+
+    /**
+     * Scans NORTH → EAST → SOUTH → WEST and picks the first unobstructed face.
+     * @return true if the active face changed (caller should sendBlockUpdated).
+     */
+    public boolean recalculateFilterFace() {
+        Level level = getLevel();
+        if (level == null) return false;
+
+        Direction bestFace = null;
+        for (Direction side : HORIZONTAL_SIDES) {
+            if (isFaceFreeForFilter(level, worldPosition, side)) {
+                bestFace = side;
+                break;
+            }
+        }
+
+        if (bestFace == filterFace) return false;
+        filterFace = bestFace;
+        setChanged();
+        return true;
+    }
+
+    /**
+     * A face is free when the neighbouring block won't physically obstruct the
+     * floating filter item rendered at the centre of that face.
+     *
+     * Blocked when ANY of:
+     *  1. Air → always free (early-out).
+     *  2. Any funnel occupies the neighbour — they mount flush on the miner's
+     *     surface regardless of which direction they face or extract.
+     *  3. Full solid cube (isRedstoneConductor).
+     *  4. Non-full block that still has a non-empty collision/support shape
+     *     (slabs, stairs, glass panes, fences, walls, …).
+     */
+    private boolean isFaceFreeForFilter(Level level, BlockPos pos, Direction side) {
+        BlockPos   neighborPos   = pos.relative(side);
+        BlockState neighborState = level.getBlockState(neighborPos);
+
+        if (neighborState.isAir()) return true;
+        if (neighborState.getBlock() instanceof FunnelBlock) return false;
+        if (neighborState.isRedstoneConductor(level, neighborPos)) return false;
+        if (!neighborState.getBlockSupportShape(level, neighborPos).isEmpty()) return false;
+
+        return true;
+    }
 
     // =========================================================================
     // SERVER TICK
@@ -264,7 +368,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         else if (!hasFuel) cachedFuelTier = null;
 
         // --- Redstone gate ---
-        boolean hasSignal        = level.hasNeighborSignal(pos);
+        boolean hasSignal         = level.hasNeighborSignal(pos);
         boolean allowedByRedstone = switch (redstoneMode) {
             case IGNORED  -> true;
             case ENABLED  -> hasSignal;
@@ -272,15 +376,15 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         };
 
         // --- Ore detection ---
-        BlockPos  abovePos   = pos.above();
-        BlockPos  belowPos   = pos.below();
+        BlockPos   abovePos   = pos.above();
+        BlockPos   belowPos   = pos.below();
         BlockState aboveState = level.getBlockState(abovePos);
         BlockState belowState = level.getBlockState(belowPos);
         boolean oreAbove = aboveState.is(ORES_TAG);
         boolean oreBelow = belowState.is(ORES_TAG);
         boolean hasOre   = oreAbove || oreBelow;
 
-        // --- Mixed ore check ---
+        // --- Mixed-ore guard ---
         boolean mixedOres = false;
         if (oreAbove && oreBelow) {
             String aboveKey  = aboveState.getBlock().builtInRegistryHolder().key().location().getPath();
@@ -296,12 +400,13 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         else noOreTicks = 0;
         boolean timedOut = noOreTimeout > 0 && noOreTicks >= noOreTimeout;
 
-        // --- Output full check ---
+        // --- Output-full guard ---
         ItemStack outputStack = inventory.getStackInSlot(1);
         boolean outputFull = !outputStack.isEmpty()
                 && outputStack.getCount() >= outputStack.getMaxStackSize();
 
-        boolean canProcess       = hasFuel && allowedByRedstone && hasOre && !outputFull && !mixedOres;
+        // --- Main processing ---
+        boolean canProcess        = hasFuel && allowedByRedstone && hasOre && !outputFull && !mixedOres;
         boolean isCurrentlyMining = false;
 
         if (canProcess) {
@@ -309,8 +414,8 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
             this.status       = STATUS_MINING;
             noOreTicks        = 0;
 
-            FuelTier tier        = cachedFuelTier;
-            int ticksPerCycle    = tier != null
+            FuelTier tier     = cachedFuelTier;
+            int ticksPerCycle = tier != null
                     ? tier.getTicksPerCycle()
                     : OretoryConfig.BASE_TICKS_PER_CYCLE.get();
 
@@ -326,6 +431,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
                 if (oreAbove) drops.addAll(getPotentialDrops(serverLevel, abovePos, aboveState));
                 if (oreBelow) drops.addAll(getPotentialDrops(serverLevel, belowPos, belowState));
 
+                // Double-drop bonus
                 if (tier != null && tier.doubleDropChance > 0f
                         && level.random.nextFloat() < tier.doubleDropChance)
                     drops.addAll(new ArrayList<>(drops));
@@ -336,9 +442,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
                         Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), remainder);
                 }
 
-                // Push to funnels (threshold-gated, round-robin)
                 tryPushToFunnels(level, pos);
-
                 consumeFuel(level, pos, fuelStack, tier);
                 setChanged();
 
@@ -350,7 +454,6 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
                 level.playSound(null, pos, Oretory.MINER_DEPOSIT.get(), SoundSource.BLOCKS,
                         0.5f, 0.85f + level.random.nextFloat() * 0.3f);
             }
-
         } else {
             miningProgress = 0;
             if (!hasFuel)        this.status = STATUS_OFF;
@@ -360,6 +463,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
             else                 this.status = STATUS_IDLE;
         }
 
+        // --- Sync block state properties ---
         boolean shouldBeLit = hasFuel;
         if (state.getValue(MinerBlock.MINING) != isCurrentlyMining
                 || state.getValue(MinerBlock.LIT) != shouldBeLit
@@ -373,7 +477,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
     }
 
     // =========================================================================
-    // FUNNEL PUSH (threshold-gated, round-robin)
+    // FUNNEL PUSH
     // =========================================================================
     private void tryPushToFunnels(Level level, BlockPos pos) {
         ItemStack outputStack = inventory.getStackInSlot(1);
@@ -395,11 +499,11 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
             int         currentIndex = (startIndex + attempts) % funnels.size();
             FunnelEntry funnel       = funnels.get(currentIndex);
 
-            int       batchSize    = funnel.isBrass() ? 16 : 1;
-            int       toSend       = Math.min(batchSize, outputStack.getCount());
-            ItemStack batch        = outputStack.copyWithCount(toSend);
-            ItemStack notAccepted  = tryInsertIntoInventory(funnel.targetInventory(), batch);
-            int       accepted     = toSend - notAccepted.getCount();
+            int       batchSize   = funnel.isBrass() ? 16 : 1;
+            int       toSend      = Math.min(batchSize, outputStack.getCount());
+            ItemStack batch       = outputStack.copyWithCount(toSend);
+            ItemStack notAccepted = tryInsertIntoInventory(funnel.targetInventory(), batch);
+            int       accepted    = toSend - notAccepted.getCount();
 
             roundRobinIndex = (currentIndex + 1) % funnels.size();
 
@@ -416,10 +520,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
 
     private List<FunnelEntry> detectExtractingFunnels(Level level, BlockPos pos) {
         List<FunnelEntry> result = new ArrayList<>();
-        Direction[] outputSides  = {
-                Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN
-        };
-        for (Direction side : outputSides) {
+        for (Direction side : new Direction[]{ Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN }) {
             BlockPos   funnelPos   = pos.relative(side);
             BlockState funnelState = level.getBlockState(funnelPos);
             if (!(funnelState.getBlock() instanceof FunnelBlock)) continue;
@@ -444,9 +545,9 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         return remaining;
     }
 
-    // -------------------------------------------------------------------------
-    // Fuel consumption
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // FUEL CONSUMPTION
+    // =========================================================================
     private void consumeFuel(Level level, BlockPos pos, ItemStack fuelStack, @Nullable FuelTier tier) {
         if (tier != null && tier.consumeAction == FuelTier.ConsumeAction.RETURN_BUCKET) {
             fuelStack.shrink(1);
@@ -459,24 +560,18 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Drill damage
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // DRILL DAMAGE
+    // =========================================================================
     private void checkDrillCollision(Level level, BlockPos pos, @Nullable FuelTier tier) {
-        AABB topDrill = new AABB(
-                pos.getX(), pos.getY() + 1.0, pos.getZ(),
-                pos.getX() + 1.0, pos.getY() + 1.1, pos.getZ() + 1.0);
-        AABB bottomDrill = new AABB(
-                pos.getX(), pos.getY() - 0.1, pos.getZ(),
-                pos.getX() + 1.0, pos.getY(), pos.getZ() + 1.0);
-
+        AABB topDrill    = new AABB(pos.getX(), pos.getY() + 1.0, pos.getZ(), pos.getX() + 1.0, pos.getY() + 1.1, pos.getZ() + 1.0);
+        AABB bottomDrill = new AABB(pos.getX(), pos.getY() - 0.1, pos.getZ(), pos.getX() + 1.0, pos.getY(),       pos.getZ() + 1.0);
         DamageSource drillDamage = level.damageSources().generic();
-        float baseDmg   = (float) OretoryConfig.BASE_DAMAGE_AMOUNT.get().doubleValue();
+        float baseDmg    = (float) OretoryConfig.BASE_DAMAGE_AMOUNT.get().doubleValue();
         float speedScale = 1.0f;
         if (OretoryConfig.DAMAGE_SCALES_WITH_SPEED.get() && tier != null)
             speedScale = Math.min(2.0f, 1.0f / Math.max(0.1f, tier.speedMultiplier));
         float damage = baseDmg * speedScale;
-
         for (LivingEntity entity : level.getEntitiesOfClass(LivingEntity.class, topDrill)) {
             if (entity instanceof Player p && p.isCrouching()) continue;
             entity.hurt(drillDamage, damage);
@@ -491,9 +586,9 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Loot drops
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // LOOT / DROPS
+    // =========================================================================
     private List<ItemStack> getPotentialDrops(ServerLevel level, BlockPos pos, BlockState state) {
         LootParams.Builder builder = new LootParams.Builder(level)
                 .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
@@ -501,11 +596,10 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         return state.getDrops(builder);
     }
 
-    // -------------------------------------------------------------------------
-    // Completion burst particles
-    // -------------------------------------------------------------------------
-    private void spawnCompletionBurst(ServerLevel level,
-                                      @Nullable BlockPos above, @Nullable BlockPos below) {
+    // =========================================================================
+    // PARTICLES
+    // =========================================================================
+    private void spawnCompletionBurst(ServerLevel level, @Nullable BlockPos above, @Nullable BlockPos below) {
         if (above != null) doCompletionBurst(level, above);
         if (below != null) doCompletionBurst(level, below);
     }
@@ -580,9 +674,6 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         return 1.6f - t * 0.8f;
     }
 
-    // -------------------------------------------------------------------------
-    // Mining particles (client)
-    // -------------------------------------------------------------------------
     private void spawnMiningParticles(Level level, BlockPos targetPos) {
         BlockState targetState = level.getBlockState(targetPos);
         if (!targetState.is(ORES_TAG)) return;
@@ -625,9 +716,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         FuelTier          tier      = FuelTier.getTier(fuelStack);
         MinerRedstoneMode mode      = this.redstoneMode;
 
-        CreateLang.builder()
-                .text(ChatFormatting.WHITE, "Ore Miner")
-                .forGoggles(tooltip, 1);
+        CreateLang.builder().text(ChatFormatting.WHITE, "Ore Miner").forGoggles(tooltip, 1);
 
         String statusStr = switch (status) {
             case STATUS_OFF         -> "No Fuel";
@@ -646,38 +735,35 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
             case STATUS_MIXED_ORES  -> ChatFormatting.LIGHT_PURPLE;
             default                 -> ChatFormatting.GRAY;
         };
-        CreateLang.builder()
-                .text(ChatFormatting.GRAY, "Status: ")
-                .text(statusColor, statusStr)
-                .forGoggles(tooltip, 1);
+        CreateLang.builder().text(ChatFormatting.GRAY, "Status: ").text(statusColor, statusStr).forGoggles(tooltip, 1);
 
         if (!fuelStack.isEmpty() && tier != null) {
-            CreateLang.builder()
-                    .text(ChatFormatting.GRAY, "Fuel: ")
-                    .text(ChatFormatting.GOLD, tier.displayName)
-                    .forGoggles(tooltip, 1);
-            CreateLang.builder()
-                    .text(ChatFormatting.GRAY, "Speed: ")
-                    .text(ChatFormatting.AQUA, tier.getSpeedLabel())
-                    .forGoggles(tooltip, 1);
-            if (tier.doubleDropChance > 0f) {
-                CreateLang.builder()
-                        .text(ChatFormatting.GRAY, "Bonus: ")
-                        .text(ChatFormatting.LIGHT_PURPLE,
-                                "+" + (int) (tier.doubleDropChance * 100) + "% double drop")
+            CreateLang.builder().text(ChatFormatting.GRAY, "Fuel: ").text(ChatFormatting.GOLD, tier.displayName).forGoggles(tooltip, 1);
+            CreateLang.builder().text(ChatFormatting.GRAY, "Speed: ").text(ChatFormatting.AQUA, tier.getSpeedLabel()).forGoggles(tooltip, 1);
+            if (tier.doubleDropChance > 0f)
+                CreateLang.builder().text(ChatFormatting.GRAY, "Bonus: ")
+                        .text(ChatFormatting.LIGHT_PURPLE, "+" + (int)(tier.doubleDropChance * 100) + "% double drop")
                         .forGoggles(tooltip, 1);
-            }
         } else {
-            CreateLang.builder()
-                    .text(ChatFormatting.GRAY, "Fuel: ")
-                    .text(ChatFormatting.DARK_GRAY, "None")
+            CreateLang.builder().text(ChatFormatting.GRAY, "Fuel: ").text(ChatFormatting.DARK_GRAY, "None").forGoggles(tooltip, 1);
+        }
+
+        ItemStack filterItem = filter != null ? filter.getFilter() : ItemStack.EMPTY;
+        if (!filterItem.isEmpty()) {
+            String faceLabel = filterFace != null
+                    ? filterFace.getName().substring(0, 1).toUpperCase() + filterFace.getName().substring(1)
+                    : "None";
+            CreateLang.builder().text(ChatFormatting.GRAY, "Fuel Filter (" + faceLabel + "): ")
+                    .text(ChatFormatting.YELLOW, filterItem.getHoverName().getString())
+                    .forGoggles(tooltip, 1);
+        } else if (filterFace == null) {
+            CreateLang.builder().text(ChatFormatting.GRAY, "Fuel Filter: ")
+                    .text(ChatFormatting.DARK_GRAY, "Blocked (all sides occupied)")
                     .forGoggles(tooltip, 1);
         }
 
-        CreateLang.builder()
-                .text(ChatFormatting.GRAY, "Release at: ")
-                .text(ChatFormatting.AQUA, outputThreshold + " item(s)")
-                .forGoggles(tooltip, 1);
+        CreateLang.builder().text(ChatFormatting.GRAY, "Release at: ")
+                .text(ChatFormatting.AQUA, outputThreshold + " item(s)").forGoggles(tooltip, 1);
 
         Level level = getLevel();
         if (level != null) {
@@ -685,65 +771,44 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
             BlockPos belowPos = worldPosition.below();
             boolean  oreAbove = level.getBlockState(abovePos).is(ORES_TAG);
             boolean  oreBelow = level.getBlockState(belowPos).is(ORES_TAG);
-            String   aboveName = oreAbove
-                    ? level.getBlockState(abovePos).getBlock().getName().getString() : "None";
-            String   belowName = oreBelow
-                    ? level.getBlockState(belowPos).getBlock().getName().getString() : "None";
-            CreateLang.builder()
-                    .text(ChatFormatting.GRAY, "Above: ")
-                    .text(oreAbove ? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY, aboveName)
-                    .forGoggles(tooltip, 1);
-            CreateLang.builder()
-                    .text(ChatFormatting.GRAY, "Below: ")
-                    .text(oreBelow ? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY, belowName)
-                    .forGoggles(tooltip, 1);
+            String   aboveName = oreAbove ? level.getBlockState(abovePos).getBlock().getName().getString() : "None";
+            String   belowName = oreBelow ? level.getBlockState(belowPos).getBlock().getName().getString() : "None";
+            CreateLang.builder().text(ChatFormatting.GRAY, "Above: ")
+                    .text(oreAbove ? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY, aboveName).forGoggles(tooltip, 1);
+            CreateLang.builder().text(ChatFormatting.GRAY, "Below: ")
+                    .text(oreBelow ? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY, belowName).forGoggles(tooltip, 1);
         }
 
-        CreateLang.builder()
-                .text(ChatFormatting.GRAY, "Redstone: ")
-                .text(ChatFormatting.YELLOW, mode.getDisplayName())
-                .forGoggles(tooltip, 1);
-
+        CreateLang.builder().text(ChatFormatting.GRAY, "Redstone: ")
+                .text(ChatFormatting.YELLOW, mode.getDisplayName()).forGoggles(tooltip, 1);
         return true;
     }
 
     // =========================================================================
     // ITEM HANDLER CAPABILITY (sided)
-    //
-    // UP    -> fuel only (insert)
-    // DOWN  -> output only (threshold-gated extract)
-    // sides -> combined (fuel insert OR threshold-gated output extract)
-    // null  -> raw inventory (internal use / Ponder)
     // =========================================================================
     public IItemHandler getItemHandler(@Nullable Direction side) {
         if (side == null)           return inventory;
         if (side == Direction.UP)   return fuelHandler;
         if (side == Direction.DOWN) return outputHandler;
-        return combinedHandler;     // NORTH / SOUTH / EAST / WEST
+        return combinedHandler;
     }
 
-    // =========================================================================
-    // Threshold accessor — called by packet handler on server thread
-    // =========================================================================
     public int  getOutputThreshold() { return outputThreshold; }
-
-    /**
-     * The ONLY place outputThreshold is mutated on the server.
-     * Called from the packet handler; marks the BE dirty so NBT is saved.
-     */
     public void setOutputThreshold(int value) {
         outputThreshold = Math.max(1, Math.min(64, value));
         setChanged();
-        // No need to call sendBlockUpdated — ContainerData sync pushes the
-        // new value to the open menu on the next tick automatically.
     }
 
+    @Nullable
+    public Direction getFilterFace() { return filterFace; }
+
     // =========================================================================
-    // NBT — outputThreshold is persisted here; this is why it survives close/open
+    // NBT
     // =========================================================================
     @Override
-    protected void saveAdditional(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
+    protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.write(tag, registries, clientPacket);
         tag.put("inventory",          inventory.serializeNBT(registries));
         tag.putInt("miningProgress",  miningProgress);
         tag.putInt("minerStatus",     status);
@@ -751,35 +816,34 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
         tag.putInt("redstoneMode",    redstoneMode.ordinal());
         tag.putInt("roundRobinIndex", roundRobinIndex);
         tag.putInt("outputThreshold", outputThreshold);
+        tag.putInt("filterFace",      filterFace == null ? -1 : filterFace.ordinal());
     }
 
     @Override
-    protected void loadAdditional(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
+    protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.read(tag, registries, clientPacket);
         inventory.deserializeNBT(registries, tag.getCompound("inventory"));
         miningProgress  = tag.getInt("miningProgress");
         status          = tag.getInt("minerStatus");
         noOreTicks      = tag.getInt("noOreTicks");
         int savedMode   = tag.getInt("redstoneMode");
-        redstoneMode    = MinerRedstoneMode.values()[
-                Math.min(savedMode, MinerRedstoneMode.values().length - 1)];
+        redstoneMode    = MinerRedstoneMode.values()[Math.min(savedMode, MinerRedstoneMode.values().length - 1)];
         roundRobinIndex = tag.getInt("roundRobinIndex");
         outputThreshold = tag.contains("outputThreshold")
                 ? Math.max(1, Math.min(64, tag.getInt("outputThreshold")))
                 : 1;
-        cachedFuelTier  = null;
-    }
-
-    @Override
-    public @NotNull CompoundTag getUpdateTag(@NotNull HolderLookup.Provider registries) {
-        CompoundTag tag = super.getUpdateTag(registries);
-        saveAdditional(tag, registries);
-        return tag;
-    }
-
-    @Override
-    public Packet<ClientGamePacketListener> getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
+        if (tag.contains("filterFace")) {
+            int faceOrdinal = tag.getInt("filterFace");
+            if (faceOrdinal < 0) {
+                filterFace = null;
+            } else {
+                Direction[] dirs = Direction.values();
+                filterFace = (faceOrdinal < dirs.length) ? dirs[faceOrdinal] : Direction.NORTH;
+            }
+        } else {
+            filterFace = Direction.NORTH;
+        }
+        cachedFuelTier = null;
     }
 
     @Override
@@ -796,7 +860,7 @@ public class MinerBlockEntity extends net.minecraft.world.level.block.entity.Blo
     }
 
     // =========================================================================
-    // INNER: single-slot wrapper
+    // Single-slot handler wrapper
     // =========================================================================
     private record ItemStackHandlerWrapper(
             ItemStackHandler handler, int slot,

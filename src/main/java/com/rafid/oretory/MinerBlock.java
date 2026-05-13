@@ -11,6 +11,7 @@ import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -62,18 +63,15 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
         Level level = context.getLevel();
         BlockPos pos = context.getClickedPos();
-
         if (!level.isClientSide) {
             MinerRedstoneMode next = state.getValue(REDSTONE_MODE).next();
             level.setBlock(pos, state.setValue(REDSTONE_MODE, next), 3);
             level.sendBlockUpdated(pos, state, level.getBlockState(pos), 3);
-
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof MinerBlockEntity minerBe) {
                 minerBe.redstoneMode = next;
                 minerBe.setChanged();
             }
-
             IWrenchable.playRotateSound(level, pos);
         }
         return InteractionResult.SUCCESS;
@@ -102,13 +100,16 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
         if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof MinerBlockEntity minerBe) {
-                // Write the BlockPos into the extra buf so the client menu knows where it is.
                 player.openMenu(minerBe, buf -> buf.writeBlockPos(pos));
             }
         }
         return InteractionResult.SUCCESS;
     }
 
+    /**
+     * Called when a neighbouring block is placed or removed.
+     * This is the main trigger for dynamic filter-face recalculation.
+     */
     @Override
     public void neighborChanged(
             @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
@@ -116,7 +117,33 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
         super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);
         if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
-            if (be instanceof MinerBlockEntity) be.setChanged();
+            if (be instanceof MinerBlockEntity minerBe) {
+                boolean faceChanged = minerBe.recalculateFilterFace();
+                if (faceChanged) {
+                    // Push the new filterFace to clients so the box moves instantly
+                    level.sendBlockUpdated(pos, state, level.getBlockState(pos), 3);
+                }
+                minerBe.setChanged();
+            }
+        }
+    }
+
+    /**
+     * Called after the block is placed in the world.
+     * Run the initial filter-face scan so placement into a tight space
+     * immediately picks the correct (or no) face.
+     */
+    @Override
+    public void setPlacedBy(
+            @NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState state,
+            @Nullable LivingEntity placer, @NotNull ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (!level.isClientSide) {
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof MinerBlockEntity minerBe) {
+                minerBe.recalculateFilterFace();
+                minerBe.setChanged();
+            }
         }
     }
 
@@ -135,6 +162,12 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
                 for (int i = 0; i < miner.inventory.getSlots(); i++)
                     Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(),
                             miner.inventory.getStackInSlot(i));
+                // Drop the filter item on break
+                if (miner.filter != null) {
+                    ItemStack filterItem = miner.filter.getFilter();
+                    if (!filterItem.isEmpty())
+                        Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), filterItem);
+                }
             }
             super.onRemove(state, level, pos, newState, isMoving);
         }
@@ -145,18 +178,17 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
             @NotNull ItemStack stack, @NotNull Item.TooltipContext context,
             @NotNull List<Component> tooltip, @NotNull TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
-
         tooltip.add(Component.literal("Drills ores above and below").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("1 fuel \u2192 1 output (instant burn)").withStyle(ChatFormatting.GRAY));
-
         if (Screen.hasShiftDown()) {
             tooltip.add(Component.empty());
             tooltip.add(Component.literal("Fuel quality controls speed & bonuses").withStyle(ChatFormatting.DARK_GRAY));
             tooltip.add(Component.literal("Premium fuels grant double-drop chances").withStyle(ChatFormatting.DARK_GRAY));
             tooltip.add(Component.literal("TOP face: fuel input  |  BOTTOM: output").withStyle(ChatFormatting.DARK_GRAY));
             tooltip.add(Component.literal("Wrench (right-click): cycle Redstone mode").withStyle(ChatFormatting.DARK_GRAY));
+            tooltip.add(Component.literal("Fuel filter: auto-placed on a free side face").withStyle(ChatFormatting.DARK_GRAY));
+            tooltip.add(Component.literal("Filter moves if the side is blocked by a block/funnel").withStyle(ChatFormatting.DARK_GRAY));
             tooltip.add(Component.literal("Crouching players immune to drill damage").withStyle(ChatFormatting.DARK_GRAY));
-            tooltip.add(Component.literal("Pauses automatically when output is full").withStyle(ChatFormatting.DARK_GRAY));
         } else {
             tooltip.add(Component.literal("[Hold Shift for details]").withStyle(ChatFormatting.DARK_GRAY));
         }
