@@ -40,35 +40,24 @@ public class Oretory {
     public static final String MODID = "oretory";
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public static final DeferredRegister.Blocks                        BLOCKS         = DeferredRegister.createBlocks(MODID);
-    public static final DeferredRegister.Items                         ITEMS          = DeferredRegister.createItems(MODID);
-    public static final DeferredRegister<BlockEntityType<?>>           BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    public static final DeferredRegister.Blocks                        BLOCKS             = DeferredRegister.createBlocks(MODID);
+    public static final DeferredRegister.Items                         ITEMS              = DeferredRegister.createItems(MODID);
+    public static final DeferredRegister<BlockEntityType<?>>           BLOCK_ENTITIES     = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
     public static final DeferredRegister<CreativeModeTab>              CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
-    public static final DeferredRegister<MenuType<?>>                  MENUS          = DeferredRegister.create(Registries.MENU, MODID);
-    public static final DeferredRegister<SoundEvent>                   SOUND_EVENTS   = DeferredRegister.create(Registries.SOUND_EVENT, MODID);
+    public static final DeferredRegister<MenuType<?>>                  MENUS              = DeferredRegister.create(Registries.MENU, MODID);
+    public static final DeferredRegister<SoundEvent>                   SOUND_EVENTS       = DeferredRegister.create(Registries.SOUND_EVENT, MODID);
 
-    // -------------------------------------------------------------------------
-    // Sounds
-    // -------------------------------------------------------------------------
-
-    /** Looping idle hum — plays whenever the miner has fuel but isn't mining. */
     public static final DeferredHolder<SoundEvent, SoundEvent> MINER_IDLE = SOUND_EVENTS.register("miner_idle",
             () -> SoundEvent.createVariableRangeEvent(
                     ResourceLocation.fromNamespaceAndPath(MODID, "miner_idle")));
 
-    /** Looping mining sound — pitch-shifted based on fuel speed. */
     public static final DeferredHolder<SoundEvent, SoundEvent> MINER_MINING = SOUND_EVENTS.register("miner_mining",
             () -> SoundEvent.createVariableRangeEvent(
                     ResourceLocation.fromNamespaceAndPath(MODID, "miner_mining")));
 
-    /** One-shot "chunk" sound when a cycle completes and items are deposited. */
     public static final DeferredHolder<SoundEvent, SoundEvent> MINER_DEPOSIT = SOUND_EVENTS.register("miner_deposit",
             () -> SoundEvent.createVariableRangeEvent(
                     ResourceLocation.fromNamespaceAndPath(MODID, "miner_deposit")));
-
-    // -------------------------------------------------------------------------
-    // Blocks / Items
-    // -------------------------------------------------------------------------
 
     public static final DeferredBlock<MinerBlock> MINER_BLOCK = BLOCKS.register("miner",
             () -> new MinerBlock(BlockBehaviour.Properties.of()
@@ -90,10 +79,6 @@ public class Oretory {
                 }
             });
 
-    // -------------------------------------------------------------------------
-    // Block Entity / Menu
-    // -------------------------------------------------------------------------
-
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MinerBlockEntity>> MINER_BE =
             BLOCK_ENTITIES.register("miner_be",
                     () -> BlockEntityType.Builder
@@ -101,13 +86,10 @@ public class Oretory {
                             //noinspection DataFlowIssue
                             .build(null));
 
+    // Uses the FriendlyByteBuf constructor so the client gets the BlockPos on open.
     public static final DeferredHolder<MenuType<?>, MenuType<MinerMenu>> MINER_MENU =
             MENUS.register("miner_menu",
-                    () -> IMenuTypeExtension.create((windowId, inv, data) -> new MinerMenu(windowId, inv)));
-
-    // -------------------------------------------------------------------------
-    // Creative Tab
-    // -------------------------------------------------------------------------
+                    () -> IMenuTypeExtension.create(MinerMenu::new));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> ORETORY_TAB =
             CREATIVE_MODE_TABS.register("oretory_tab", () -> CreativeModeTab.builder()
@@ -115,10 +97,6 @@ public class Oretory {
                     .icon(() -> MINER_ITEM.get().getDefaultInstance())
                     .displayItems((parameters, output) -> output.accept(MINER_ITEM.get()))
                     .build());
-
-    // -------------------------------------------------------------------------
-    // Constructor
-    // -------------------------------------------------------------------------
 
     public Oretory(IEventBus modEventBus, ModContainer modContainer) {
         BLOCKS.register(modEventBus);
@@ -135,10 +113,8 @@ public class Oretory {
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(MinerPackets::register);
 
-        // Register config
         modContainer.registerConfig(ModConfig.Type.COMMON, OretoryConfig.SPEC, "oretory-common.toml");
 
-        // Ponder scenes
         PonderIndex.addPlugin(new ModPonderIndex());
 
         LOGGER.info("Oretory initialized!");
