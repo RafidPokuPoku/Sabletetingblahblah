@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "mining=false,redstone_mode=ignored":  { "model": "oretory:block/advanced_miner" },
+    "mining=false,redstone_mode=enabled":  { "model": "oretory:block/advanced_miner" },
+    "mining=false,redstone_mode=disabled": { "model": "oretory:block/advanced_miner" },
+    "mining=true,redstone_mode=ignored":   { "model": "oretory:block/advanced_miner" },
+    "mining=true,redstone_mode=enabled":   { "model": "oretory:block/advanced_miner" },
+    "mining=true,redstone_mode=disabled":  { "model": "oretory:block/advanced_miner" }
+  }
+}

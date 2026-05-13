@@ -1,6 +1,6 @@
 package com.rafid.oretory.client;
 
-import com.rafid.oretory.MinerBlockEntity;
+import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.sounds.SoundEvent;
@@ -11,7 +11,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 @OnlyIn(Dist.CLIENT)
 public class MinerSoundInstance extends AbstractTickableSoundInstance {
 
-    private final MinerBlockEntity blockEntity;
+    private final SmartBlockEntity blockEntity;
     private float targetPitch;
     private boolean fadingOut = false;
 
@@ -19,7 +19,7 @@ public class MinerSoundInstance extends AbstractTickableSoundInstance {
      * @param looping  true for the mining loop, false for the one-shot idle hum
      * @param pitch    initial pitch (0.8–1.6 based on fuel speed)
      */
-    public MinerSoundInstance(MinerBlockEntity blockEntity, SoundEvent sound,
+    public MinerSoundInstance(SmartBlockEntity blockEntity, SoundEvent sound,
                               boolean looping, float pitch) {
         super(sound, SoundSource.BLOCKS, SoundInstance.createUnseededRandom());
 
@@ -54,8 +54,6 @@ public class MinerSoundInstance extends AbstractTickableSoundInstance {
             pitch = targetPitch;
         }
 
-        // Good volume falloff: louder the closer you are, quieter past ~16 blocks
-        // (handled automatically by LINEAR attenuation, but we scale base volume here)
         volume = fadingOut ? volume : 0.6f;
     }
 

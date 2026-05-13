@@ -47,6 +47,9 @@ public class Oretory {
     public static final DeferredRegister<MenuType<?>>                  MENUS              = DeferredRegister.create(Registries.MENU, MODID);
     public static final DeferredRegister<SoundEvent>                   SOUND_EVENTS       = DeferredRegister.create(Registries.SOUND_EVENT, MODID);
 
+    // =========================================================================
+    // SOUNDS
+    // =========================================================================
     public static final DeferredHolder<SoundEvent, SoundEvent> MINER_IDLE = SOUND_EVENTS.register("miner_idle",
             () -> SoundEvent.createVariableRangeEvent(
                     ResourceLocation.fromNamespaceAndPath(MODID, "miner_idle")));
@@ -59,6 +62,9 @@ public class Oretory {
             () -> SoundEvent.createVariableRangeEvent(
                     ResourceLocation.fromNamespaceAndPath(MODID, "miner_deposit")));
 
+    // =========================================================================
+    // ORE MINER
+    // =========================================================================
     public static final DeferredBlock<MinerBlock> MINER_BLOCK = BLOCKS.register("miner",
             () -> new MinerBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.STONE)
@@ -86,18 +92,61 @@ public class Oretory {
                             //noinspection DataFlowIssue
                             .build(null));
 
-    // Uses the FriendlyByteBuf constructor so the client gets the BlockPos on open.
     public static final DeferredHolder<MenuType<?>, MenuType<MinerMenu>> MINER_MENU =
             MENUS.register("miner_menu",
                     () -> IMenuTypeExtension.create(MinerMenu::new));
 
+    // =========================================================================
+    // ADVANCED ORE MINER
+    // =========================================================================
+    public static final DeferredBlock<AdvancedMinerBlock> ADVANCED_MINER_BLOCK = BLOCKS.register("advanced_miner",
+            () -> new AdvancedMinerBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.STONE)
+                    .strength(4.0f)
+                    .noOcclusion()));
+
+    public static final DeferredItem<BlockItem> ADVANCED_MINER_ITEM = ITEMS.register("advanced_miner",
+            () -> new BlockItem(ADVANCED_MINER_BLOCK.get(), new Item.Properties()) {
+                @Override
+                @SuppressWarnings("removal")
+                public void initializeClient(@NotNull Consumer<IClientItemExtensions> consumer) {
+                    consumer.accept(new IClientItemExtensions() {
+                        @Override
+                        public @NotNull BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                            // Reuse MinerItemRenderer for now — swap when you have a dedicated one
+                            return MinerItemRenderer.INSTANCE;
+                        }
+                    });
+                }
+            });
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AdvancedMinerBlockEntity>> ADVANCED_MINER_BE =
+            BLOCK_ENTITIES.register("advanced_miner_be",
+                    () -> BlockEntityType.Builder
+                            .of(AdvancedMinerBlockEntity::new, ADVANCED_MINER_BLOCK.get())
+                            //noinspection DataFlowIssue
+                            .build(null));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<AdvancedMinerMenu>> ADVANCED_MINER_MENU =
+            MENUS.register("advanced_miner_menu",
+                    () -> IMenuTypeExtension.create(AdvancedMinerMenu::new));
+
+    // =========================================================================
+    // CREATIVE TAB
+    // =========================================================================
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> ORETORY_TAB =
             CREATIVE_MODE_TABS.register("oretory_tab", () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.oretory_tab"))
                     .icon(() -> MINER_ITEM.get().getDefaultInstance())
-                    .displayItems((parameters, output) -> output.accept(MINER_ITEM.get()))
+                    .displayItems((parameters, output) -> {
+                        output.accept(MINER_ITEM.get());
+                        output.accept(ADVANCED_MINER_ITEM.get());
+                    })
                     .build());
 
+    // =========================================================================
+    // CONSTRUCTOR
+    // =========================================================================
     public Oretory(IEventBus modEventBus, ModContainer modContainer) {
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -112,6 +161,7 @@ public class Oretory {
         modEventBus.addListener(this::registerCapabilities);
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(MinerPackets::register);
+        modEventBus.addListener(AdvancedMinerPackets::register);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, OretoryConfig.SPEC, "oretory-common.toml");
 
@@ -120,6 +170,9 @@ public class Oretory {
         LOGGER.info("Oretory initialized!");
     }
 
+    // =========================================================================
+    // SETUP
+    // =========================================================================
     private void commonSetup(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> LOGGER.info("Oretory common setup complete."));
     }
@@ -129,5 +182,10 @@ public class Oretory {
                 Capabilities.ItemHandler.BLOCK,
                 MINER_BE.get(),
                 MinerBlockEntity::getItemHandler);
+
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                ADVANCED_MINER_BE.get(),
+                AdvancedMinerBlockEntity::getItemHandler);
     }
 }

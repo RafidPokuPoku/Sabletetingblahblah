@@ -2,6 +2,7 @@ package com.rafid.oretory.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.rafid.oretory.AdvancedMinerBlockEntity;
 import com.rafid.oretory.MinerBlockEntity;
 import net.minecraft.client.model.HierarchicalModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
@@ -41,10 +42,16 @@ public class miner<T extends Entity> extends HierarchicalModel<T> {
 		return LayerDefinition.create(meshdefinition, 64, 64);
 	}
 
-	// This is a custom method we will call from the Renderer to handle the animation
+	/** Called from MinerRenderer. */
 	public void setupBlockEntityAnim(MinerBlockEntity bean, float ageInTicks) {
 		this.root().getAllParts().forEach(ModelPart::resetPose);
+		this.animate(bean.idleAnimationState, minerAnimationIdle.idle, ageInTicks);
+		this.animate(bean.miningAnimationState, minerAnimationMining.mining, ageInTicks);
+	}
 
+	/** Called from AdvancedMinerRenderer — same animations, different block entity type. */
+	public void setupBlockEntityAnim(AdvancedMinerBlockEntity bean, float ageInTicks) {
+		this.root().getAllParts().forEach(ModelPart::resetPose);
 		this.animate(bean.idleAnimationState, minerAnimationIdle.idle, ageInTicks);
 		this.animate(bean.miningAnimationState, minerAnimationMining.mining, ageInTicks);
 	}

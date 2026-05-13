@@ -9,14 +9,15 @@ public class ClientModEvents {
 
     public static void registerRenderers(@NotNull EntityRenderersEvent.RegisterRenderers event) {
         event.registerBlockEntityRenderer(Oretory.MINER_BE.get(), MinerRenderer::new);
+        event.registerBlockEntityRenderer(Oretory.ADVANCED_MINER_BE.get(), AdvancedMinerRenderer::new);
     }
 
     public static void registerLayerDefinitions(@NotNull EntityRenderersEvent.RegisterLayerDefinitions event) {
-        // Ensure 'miner' matches your model class name
         event.registerLayerDefinition(miner.LAYER_LOCATION, miner::createBodyLayer);
     }
 
     public static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(Oretory.MINER_MENU.get(), MinerScreen::new);
+        event.register(Oretory.ADVANCED_MINER_MENU.get(), AdvancedMinerScreen::new);
     }
 }
