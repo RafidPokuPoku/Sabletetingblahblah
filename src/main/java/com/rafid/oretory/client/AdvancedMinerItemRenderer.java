@@ -1,7 +1,7 @@
 package com.rafid.oretory.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.rafid.oretory.MinerBlockEntity;
+import com.rafid.oretory.AdvancedMinerBlockEntity;
 import com.rafid.oretory.Oretory;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
@@ -11,11 +11,10 @@ import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
-public class MinerItemRenderer extends BlockEntityWithoutLevelRenderer {
+public class AdvancedMinerItemRenderer extends BlockEntityWithoutLevelRenderer {
+    public static final AdvancedMinerItemRenderer INSTANCE = new AdvancedMinerItemRenderer();
 
-    public static final MinerItemRenderer INSTANCE = new MinerItemRenderer();
-
-    public MinerItemRenderer() {
+    public AdvancedMinerItemRenderer() {
         super(Minecraft.getInstance().getBlockEntityRenderDispatcher(),
                 Minecraft.getInstance().getEntityModels());
     }
@@ -27,11 +26,11 @@ public class MinerItemRenderer extends BlockEntityWithoutLevelRenderer {
                              @NotNull MultiBufferSource buffer,
                              int packedLight,
                              int packedOverlay) {
-        // Uses MinerBlockEntity so the renderer picks up
-        // LAYER_LOCATION and miner.png — the Andesite Miner texture.
+        // Renders using the AdvancedMinerBlockEntity so it picks up
+        // the ADVANCED_LAYER_LOCATION bake and advanced_miner.png texture
         Minecraft.getInstance().getBlockEntityRenderDispatcher().renderItem(
-                new MinerBlockEntity(BlockPos.ZERO,
-                        Oretory.MINER_BLOCK.get().defaultBlockState()),
+                new AdvancedMinerBlockEntity(BlockPos.ZERO,
+                        Oretory.ADVANCED_MINER_BLOCK.get().defaultBlockState()),
                 poseStack, buffer, packedLight, packedOverlay
         );
     }

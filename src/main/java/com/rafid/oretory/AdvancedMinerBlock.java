@@ -38,7 +38,6 @@ public class AdvancedMinerBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<AdvancedMinerBlock> CODEC = simpleCodec(AdvancedMinerBlock::new);
 
-    // No LIT property — Advanced Miner does not use it
     public static final BooleanProperty MINING = BooleanProperty.create("mining");
     public static final EnumProperty<MinerRedstoneMode> REDSTONE_MODE =
             EnumProperty.create("redstone_mode", MinerRedstoneMode.class);
@@ -57,6 +56,13 @@ public class AdvancedMinerBlock extends BaseEntityBlock implements IWrenchable {
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(MINING, REDSTONE_MODE);
     }
+
+    // NOTE: initializeClient is intentionally NOT overridden here.
+    // Custom item rendering (AdvancedMinerItemRenderer) is registered on the
+    // BlockItem in Oretory.java via ADVANCED_MINER_ITEM's initializeClient.
+    // Overriding it on the Block class causes a compile error because Block
+    // already has initializeClient(Consumer<IClientBlockExtensions>) and the
+    // two methods have the same erasure but cannot override each other.
 
     @Override
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
@@ -175,7 +181,7 @@ public class AdvancedMinerBlock extends BaseEntityBlock implements IWrenchable {
             tooltip.add(Component.literal("Mixed ores are separated automatically").withStyle(ChatFormatting.DARK_GRAY));
             tooltip.add(Component.literal("TOP face: fuel input  |  BOTTOM: output").withStyle(ChatFormatting.DARK_GRAY));
             tooltip.add(Component.literal("Wrench (right-click): cycle Redstone mode").withStyle(ChatFormatting.DARK_GRAY));
-            tooltip.add(Component.literal("~1.5x faster than the standard Miner").withStyle(ChatFormatting.DARK_GRAY));
+            tooltip.add(Component.literal("~1.5x faster than the Andesite Miner").withStyle(ChatFormatting.DARK_GRAY));
         } else {
             tooltip.add(Component.literal("[Hold Shift for details]").withStyle(ChatFormatting.DARK_GRAY));
         }

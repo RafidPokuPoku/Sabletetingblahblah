@@ -1,6 +1,7 @@
 package com.rafid.oretory;
 
 import com.mojang.logging.LogUtils;
+import com.rafid.oretory.client.AdvancedMinerItemRenderer;
 import com.rafid.oretory.client.ClientModEvents;
 import com.rafid.oretory.client.MinerItemRenderer;
 import com.rafid.oretory.ponder.ModPonderIndex;
@@ -63,7 +64,8 @@ public class Oretory {
                     ResourceLocation.fromNamespaceAndPath(MODID, "miner_deposit")));
 
     // =========================================================================
-    // ORE MINER
+    // ANDESITE MINER  (registry name stays "miner" for save compatibility)
+    // Display name is set in en_us.json: "block.oretory.miner" = "Andesite Miner"
     // =========================================================================
     public static final DeferredBlock<MinerBlock> MINER_BLOCK = BLOCKS.register("miner",
             () -> new MinerBlock(BlockBehaviour.Properties.of()
@@ -97,7 +99,8 @@ public class Oretory {
                     () -> IMenuTypeExtension.create(MinerMenu::new));
 
     // =========================================================================
-    // ADVANCED ORE MINER
+    // BRASS MINER  (registry name stays "advanced_miner" for save compatibility)
+    // Display name is set in en_us.json: "block.oretory.advanced_miner" = "Brass Miner"
     // =========================================================================
     public static final DeferredBlock<AdvancedMinerBlock> ADVANCED_MINER_BLOCK = BLOCKS.register("advanced_miner",
             () -> new AdvancedMinerBlock(BlockBehaviour.Properties.of()
@@ -113,8 +116,9 @@ public class Oretory {
                     consumer.accept(new IClientItemExtensions() {
                         @Override
                         public @NotNull BlockEntityWithoutLevelRenderer getCustomRenderer() {
-                            // Reuse MinerItemRenderer for now — swap when you have a dedicated one
-                            return MinerItemRenderer.INSTANCE;
+                            // Uses AdvancedMinerItemRenderer so the Brass Miner shows
+                            // its own model/texture in inventory, hotbar, and item frames.
+                            return AdvancedMinerItemRenderer.INSTANCE;
                         }
                     });
                 }

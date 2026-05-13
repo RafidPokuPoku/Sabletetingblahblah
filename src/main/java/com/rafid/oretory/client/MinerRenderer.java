@@ -15,25 +15,28 @@ import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.NotNull;
 
 public class MinerRenderer implements BlockEntityRenderer<MinerBlockEntity> {
+
     private final miner<Entity> model;
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(Oretory.MODID, "textures/block/miner.png");
+    private static final ResourceLocation TEXTURE =
+            ResourceLocation.fromNamespaceAndPath(Oretory.MODID, "textures/block/miner.png");
 
     public MinerRenderer(BlockEntityRendererProvider.Context context) {
+        // Bakes with the standard miner layer — uses miner.png UVs
         this.model = new miner<>(context.bakeLayer(miner.LAYER_LOCATION));
     }
 
     @Override
-    public void render(@NotNull MinerBlockEntity blockEntity, float partialTick, @NotNull PoseStack poseStack, @NotNull MultiBufferSource bufferSource, int packedLight, int packedOverlay) {
-        // --- Model render (translated/rotated pose) ---
-        poseStack.pushPose();
+    public void render(@NotNull MinerBlockEntity blockEntity, float partialTick,
+                       @NotNull PoseStack poseStack, @NotNull MultiBufferSource bufferSource,
+                       int packedLight, int packedOverlay) {
 
+        poseStack.pushPose();
         poseStack.translate(0.5, 1.5, 0.5);
         poseStack.mulPose(Axis.XP.rotationDegrees(180));
 
         float ageInTicks = 0;
-        if (blockEntity.getLevel() != null) {
+        if (blockEntity.getLevel() != null)
             ageInTicks = blockEntity.getLevel().getGameTime() + partialTick;
-        }
 
         this.model.setupBlockEntityAnim(blockEntity, ageInTicks);
 
@@ -42,7 +45,7 @@ public class MinerRenderer implements BlockEntityRenderer<MinerBlockEntity> {
 
         poseStack.popPose();
 
-        // --- Filter item render (clean block-origin pose, must be outside pushPose/popPose) ---
+        // Filter item render — must be outside pushPose/popPose
         FilteringRenderer.renderOnBlockEntity(blockEntity, partialTick, poseStack, bufferSource, packedLight, packedOverlay);
     }
 }

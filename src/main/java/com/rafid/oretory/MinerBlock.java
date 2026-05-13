@@ -7,6 +7,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -83,19 +85,119 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
             @NotNull BlockPos pos, @NotNull Player player, @NotNull InteractionHand hand,
             @NotNull BlockHitResult hitResult) {
 
-        if (stack.getItem() instanceof WrenchItem) {
+        // Wrench takes priority — must be main hand
+        if (hand == InteractionHand.MAIN_HAND && stack.getItem() instanceof WrenchItem) {
             InteractionResult result = onWrenched(state, new UseOnContext(player, hand, hitResult));
             return result.consumesAction()
                     ? ItemInteractionResult.SUCCESS
                     : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
+
+        // Shift + right-click with a Brass Ingot upgrades to Brass Miner
+        // Must be main hand so off-hand doesn't trigger it accidentally
+        if (hand == InteractionHand.MAIN_HAND && player.isShiftKeyDown() && isBrassIngot(stack)) {
+            if (!level.isClientSide) {
+                upgradeToAdvancedMiner(level, pos, state, stack, player);
+            }
+            // Return SUCCESS on both sides so the action is consumed and GUI does NOT open
+            return ItemInteractionResult.SUCCESS;
+        }
+
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    /**
+     * Replaces this Andesite Miner with a Brass Miner, carrying over the
+     * redstone mode, fuel/output inventory, and filter NBT from the old BE.
+     * Consumes one Brass Ingot from the player's hand.
+     */
+    private void upgradeToAdvancedMiner(Level level, BlockPos pos, BlockState oldState,
+                                        ItemStack heldStack, Player player) {
+        BlockEntity oldBe = level.getBlockEntity(pos);
+        if (!(oldBe instanceof MinerBlockEntity minerBe)) return;
+
+        // Snapshot what we need before the block is removed
+        MinerRedstoneMode savedMode   = minerBe.redstoneMode;
+        ItemStack         savedFuel   = minerBe.inventory.getStackInSlot(0).copy();
+        ItemStack         savedOutput = minerBe.inventory.getStackInSlot(1).copy();
+        // Grab filter item if one is set — drop it so the player doesn't lose it
+        ItemStack         savedFilter = minerBe.filter != null
+                ? minerBe.filter.getFilter().copy()
+                : ItemStack.EMPTY;
+
+        // Build the new block state, copying redstone mode over
+        BlockState newState = Oretory.ADVANCED_MINER_BLOCK.get().defaultBlockState()
+                .setValue(AdvancedMinerBlock.REDSTONE_MODE, savedMode)
+                .setValue(AdvancedMinerBlock.MINING, false);
+
+        // Place the new block (this destroys the old BE)
+        level.setBlock(pos, newState, 3);
+        level.sendBlockUpdated(pos, oldState, newState, 3);
+
+        // Now configure the new BE
+        BlockEntity newBe = level.getBlockEntity(pos);
+        if (newBe instanceof AdvancedMinerBlockEntity advBe) {
+            advBe.redstoneMode = savedMode;
+
+            // Carry over fuel
+            if (!savedFuel.isEmpty()) {
+                ItemStack remainder = advBe.inventory.insertItem(0, savedFuel, false);
+                if (!remainder.isEmpty())
+                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), remainder);
+            }
+
+            // Carry over bottom ore output
+            if (!savedOutput.isEmpty()) {
+                ItemStack remainder = advBe.inventory.insertItem(1, savedOutput, false);
+                if (!remainder.isEmpty())
+                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), remainder);
+            }
+
+            advBe.recalculateFilterFace();
+            advBe.setChanged();
+        }
+
+        // Drop the old filter item on the ground so the player doesn't lose it
+        if (!savedFilter.isEmpty())
+            Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), savedFilter);
+
+        // Consume one Brass Ingot from the player's hand (unless in creative)
+        if (!player.getAbilities().instabuild) {
+            heldStack.shrink(1);
+        }
+
+        // Satisfying upgrade sound
+        level.playSound(null, pos, SoundEvents.ANVIL_USE, SoundSource.BLOCKS, 0.6f, 1.2f);
+
+        // Tell the player what happened (action bar)
+        player.displayClientMessage(
+                Component.literal("Upgraded to Brass Miner!").withStyle(ChatFormatting.GOLD),
+                true
+        );
+    }
+
+    /**
+     * Returns true if the given stack is a Create Brass Ingot.
+     */
+    private static boolean isBrassIngot(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        var loc = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(stack.getItem());
+        return loc != null
+                && "create".equals(loc.getNamespace())
+                && "brass_ingot".equals(loc.getPath());
     }
 
     @Override
     protected @NotNull InteractionResult useWithoutItem(
             @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
             @NotNull Player player, @NotNull BlockHitResult hitResult) {
+
+        // If the player is shift-clicking, don't open the GUI —
+        // the item interaction (upgrade or other) should have been handled above.
+        if (player.isShiftKeyDown()) {
+            return InteractionResult.PASS;
+        }
 
         if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
@@ -108,7 +210,6 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
 
     /**
      * Called when a neighbouring block is placed or removed.
-     * This is the main trigger for dynamic filter-face recalculation.
      */
     @Override
     public void neighborChanged(
@@ -120,7 +221,6 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
             if (be instanceof MinerBlockEntity minerBe) {
                 boolean faceChanged = minerBe.recalculateFilterFace();
                 if (faceChanged) {
-                    // Push the new filterFace to clients so the box moves instantly
                     level.sendBlockUpdated(pos, state, level.getBlockState(pos), 3);
                 }
                 minerBe.setChanged();
@@ -130,8 +230,6 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
 
     /**
      * Called after the block is placed in the world.
-     * Run the initial filter-face scan so placement into a tight space
-     * immediately picks the correct (or no) face.
      */
     @Override
     public void setPlacedBy(
@@ -162,7 +260,6 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
                 for (int i = 0; i < miner.inventory.getSlots(); i++)
                     Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(),
                             miner.inventory.getStackInSlot(i));
-                // Drop the filter item on break
                 if (miner.filter != null) {
                     ItemStack filterItem = miner.filter.getFilter();
                     if (!filterItem.isEmpty())
@@ -180,6 +277,7 @@ public class MinerBlock extends BaseEntityBlock implements IWrenchable {
         super.appendHoverText(stack, context, tooltip, flag);
         tooltip.add(Component.literal("Drills ores above and below").withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.literal("1 fuel \u2192 1 output (instant burn)").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.literal("Shift + Right-click with Brass Ingot to upgrade").withStyle(ChatFormatting.YELLOW));
         if (Screen.hasShiftDown()) {
             tooltip.add(Component.empty());
             tooltip.add(Component.literal("Fuel quality controls speed & bonuses").withStyle(ChatFormatting.DARK_GRAY));

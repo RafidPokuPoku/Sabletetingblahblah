@@ -16,14 +16,13 @@ import org.jetbrains.annotations.NotNull;
 
 public class AdvancedMinerRenderer implements BlockEntityRenderer<AdvancedMinerBlockEntity> {
 
-    // Reuses the same 'miner' model class as MinerRenderer.
-    // Swap to a dedicated model later if you want different geometry.
     private final miner<Entity> model;
     private static final ResourceLocation TEXTURE =
             ResourceLocation.fromNamespaceAndPath(Oretory.MODID, "textures/block/advanced_miner.png");
 
     public AdvancedMinerRenderer(BlockEntityRendererProvider.Context context) {
-        this.model = new miner<>(context.bakeLayer(miner.LAYER_LOCATION));
+        // Bakes with the ADVANCED layer — uses advanced_miner.png UVs
+        this.model = new miner<>(context.bakeLayer(miner.ADVANCED_LAYER_LOCATION));
     }
 
     @Override
@@ -46,6 +45,7 @@ public class AdvancedMinerRenderer implements BlockEntityRenderer<AdvancedMinerB
 
         poseStack.popPose();
 
+        // Filter item render — must be outside pushPose/popPose
         FilteringRenderer.renderOnBlockEntity(blockEntity, partialTick, poseStack, bufferSource, packedLight, packedOverlay);
     }
 }

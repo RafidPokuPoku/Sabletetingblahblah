@@ -13,7 +13,8 @@ public class ClientModEvents {
     }
 
     public static void registerLayerDefinitions(@NotNull EntityRenderersEvent.RegisterLayerDefinitions event) {
-        event.registerLayerDefinition(miner.LAYER_LOCATION, miner::createBodyLayer);
+        event.registerLayerDefinition(miner.LAYER_LOCATION,          miner::createBodyLayer);
+        event.registerLayerDefinition(miner.ADVANCED_LAYER_LOCATION, miner::createAdvancedBodyLayer);
     }
 
     public static void registerScreens(RegisterMenuScreensEvent event) {

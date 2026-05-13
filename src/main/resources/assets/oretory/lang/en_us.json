@@ -1,10 +1,10 @@
 {
   "itemGroup.oretory_tab": "Oretory",
 
-  "block.oretory.miner": "Ore Miner",
-  "item.oretory.miner": "Ore Miner",
-  "block.oretory.advanced_miner": "Advanced Ore Miner",
-  "item.oretory.advanced_miner": "Advanced Ore Miner",
+  "block.oretory.miner": "Andesite Miner",
+  "item.oretory.miner": "Andesite Miner",
+  "block.oretory.advanced_miner": "Brass Miner",
+  "item.oretory.advanced_miner": "Brass Miner",
 
   "oretory.configuration.title": "Oretory Config",
   "oretory.configuration.section.oretory.common.toml": "Oretory Config",
@@ -19,27 +19,27 @@
   "subtitles.oretory.miner_deposit": "Miner deposits ore",
 
   "oretory.ponder.miner_basic.header": "Extracting Ores",
-  "oretory.ponder.miner_basic.text_1": "The Miner can be placed directly on top of any Ore block",
-  "oretory.ponder.miner_basic.text_2": "Place any Fuel source into the Miner's input slot to power it",
-  "oretory.ponder.miner_basic.text_3": "Once fuelled, the Miner continuously produces Raw Ore without ever breaking the block",
+  "oretory.ponder.miner_basic.text_1": "The Andesite Miner can be placed directly on top of any Ore block",
+  "oretory.ponder.miner_basic.text_2": "Place any Fuel source into the Andesite Miner's input slot to power it",
+  "oretory.ponder.miner_basic.text_3": "Once fuelled, the Andesite Miner continuously produces Raw Ore without ever breaking the block",
   "oretory.ponder.miner_basic.text_4": "Next: Mining from two Ore blocks at once, and Redstone control",
 
   "oretory.ponder.miner_redstone.header": "Double Extraction & Redstone Control",
-  "oretory.ponder.miner_redstone.text_1": "Place an Ore block above the Miner to extract from both sides simultaneously",
+  "oretory.ponder.miner_redstone.text_1": "Place an Ore block above the Andesite Miner to extract from both sides simultaneously",
   "oretory.ponder.miner_redstone.text_2": "Dual extraction uses 2x Fuel per cycle, but produces 2x Raw Ore in return",
-  "oretory.ponder.miner_redstone.text_3": "A Redstone signal will instantly pause the Miner",
+  "oretory.ponder.miner_redstone.text_3": "A Redstone signal will instantly pause the Andesite Miner",
   "oretory.ponder.miner_redstone.text_4": "Next: Fully automated Fuel input and Ore output",
 
-  "oretory.ponder.miner_automation.header": "Automating the Miner",
-  "oretory.ponder.miner_automation.text_1": "A Chest stocked with Fuel feeds the Miner automatically via a Funnel and Mechanical Belt",
-  "oretory.ponder.miner_automation.text_2": "The Miner runs continuously as long as it is supplied with Fuel",
+  "oretory.ponder.miner_automation.header": "Automating the Andesite Miner",
+  "oretory.ponder.miner_automation.text_1": "A Chest stocked with Fuel feeds the Andesite Miner automatically via a Funnel and Mechanical Belt",
+  "oretory.ponder.miner_automation.text_2": "The Andesite Miner runs continuously as long as it is supplied with Fuel",
   "oretory.ponder.miner_automation.text_3": "A Funnel on the output side pulls Raw Ore out and delivers it to a storage Chest via Belt",
-  "oretory.ponder.miner_automation.text_4": "With this setup the Miner runs indefinitely, completely hands-free",
+  "oretory.ponder.miner_automation.text_4": "With this setup the Andesite Miner runs indefinitely, completely hands-free",
 
   "oretory.ponder.advanced_miner_basic.header": "Dual Ore Extraction",
-  "oretory.ponder.advanced_miner_basic.text_1": "The Advanced Miner works like the standard Miner, but with two separate output slots",
+  "oretory.ponder.advanced_miner_basic.text_1": "The Brass Miner works like the Andesite Miner, but with two separate output slots",
   "oretory.ponder.advanced_miner_basic.text_2": "Place different Ore blocks above and below — each ore goes to its own output slot",
-  "oretory.ponder.advanced_miner_basic.text_3": "It consumes 2 Fuel per cycle and runs ~1.5x faster than the standard Miner",
+  "oretory.ponder.advanced_miner_basic.text_3": "It consumes 2 Fuel per cycle and runs ~1.5x faster than the Andesite Miner",
   "oretory.ponder.advanced_miner_basic.text_4": "Mixed ores are separated automatically — no sorter needed downstream",
 
   "oretory.ponder.advanced_miner_output.header": "Output Control & Automation",
