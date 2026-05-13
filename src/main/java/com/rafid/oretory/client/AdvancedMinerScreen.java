@@ -24,7 +24,7 @@ public class AdvancedMinerScreen extends AbstractSimiContainerScreen<AdvancedMin
     private static final int GUI_HEIGHT = 166;
 
     // Progress bar — 2px lower than before, clear of fuel slot
-    private static final int BAR_X = 70;
+    private static final int BAR_X = 72; // Adjusted from 73
     private static final int BAR_Y = 40;
     private static final int BAR_W = 32;
     private static final int BAR_H = 4;
@@ -32,17 +32,17 @@ public class AdvancedMinerScreen extends AbstractSimiContainerScreen<AdvancedMin
     // Status indicator + text — fixed position, not overlapping anything
     private static final int INDICATOR_X   = 7;
     private static final int INDICATOR_Y   = 60;
-    private static final int STATUS_TEXT_X = 20;
-    private static final int STATUS_TEXT_Y = 62;
+    private static final int STATUS_TEXT_X = 26; // Adjusted from 22
+    private static final int STATUS_TEXT_Y = 59; // Adjusted from 61
 
     // Slot visual offset — slots + arrows + boxes all 1px lower as a group
     private static final int SLOT_GROUP_OFFSET = 1;
 
     // Top threshold box: above the top slot
-    private static final int TOP_THRESHOLD_X = AdvancedMinerMenu.OUTPUT_TOP_SLOT_X;
+    private static final int TOP_THRESHOLD_X = AdvancedMinerMenu.OUTPUT_TOP_SLOT_X - 2; // Moved left by 2 pixels
     private static final int TOP_THRESHOLD_Y = AdvancedMinerMenu.OUTPUT_TOP_SLOT_Y - 13 + SLOT_GROUP_OFFSET;
     // Bot threshold box: below the bottom slot
-    private static final int BOT_THRESHOLD_X = AdvancedMinerMenu.OUTPUT_BOTTOM_SLOT_X;
+    private static final int BOT_THRESHOLD_X = AdvancedMinerMenu.OUTPUT_BOTTOM_SLOT_X - 2; // Moved left by 2 pixels
     private static final int BOT_THRESHOLD_Y = AdvancedMinerMenu.OUTPUT_BOTTOM_SLOT_Y + 21 + SLOT_GROUP_OFFSET;
     private static final int THRESHOLD_W = 26;
     private static final int THRESHOLD_H = 12;
@@ -240,10 +240,10 @@ public class AdvancedMinerScreen extends AbstractSimiContainerScreen<AdvancedMin
 
         // Arrow indicators for threshold boxes, shifted down 1px with the group
         graphics.drawString(font, "\u25B2",
-                leftPos + TOP_THRESHOLD_X - 10,
+                leftPos + TOP_THRESHOLD_X + THRESHOLD_W + 2,
                 topPos  + TOP_THRESHOLD_Y  + 1, 0x888888, false);
         graphics.drawString(font, "\u25BC",
-                leftPos + BOT_THRESHOLD_X - 10,
+                leftPos + BOT_THRESHOLD_X + THRESHOLD_W + 2,
                 topPos  + BOT_THRESHOLD_Y  + 1, 0x888888, false);
 
         // Player inventory title
